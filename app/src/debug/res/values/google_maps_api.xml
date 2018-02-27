@@ -1,0 +1,24 @@
+<resources>
+    <!--
+    TODO: Before you run your application, you need a Google Maps API key.
+
+    To get one, follow this link, follow the directions and press "Create" at the end:
+
+    https://console.developers.google.com/flows/enableapi?apiid=maps_android_backend&keyType=CLIENT_SIDE_ANDROID&r=EB:15:86:28:5D:5C:EF:9A:9B:AB:81:A5:0C:BA:EC:30:C2:24:7C:BB%3Bapp.imu.indoortrack
+
+    You can also add your credentials to an existing key, using these values:
+
+    Package name:
+    EB:15:86:28:5D:5C:EF:9A:9B:AB:81:A5:0C:BA:EC:30:C2:24:7C:BB
+
+    SHA-1 certificate fingerprint:
+    EB:15:86:28:5D:5C:EF:9A:9B:AB:81:A5:0C:BA:EC:30:C2:24:7C:BB
+
+    Alternatively, follow the directions here:
+    https://developers.google.com/maps/documentation/android/start#get-key
+
+    Once you have your key (it starts with "AIza"), replace the "google_maps_key"
+    string in this file.
+    -->
+    <string name="google_maps_key" templateMergeStrategy="preserve" translatable="false">AIzaSyBtQvPoE0EpwikGRqVWRrELMIJuxwFpaO0</string>
+</resources>
