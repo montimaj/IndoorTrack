@@ -29,7 +29,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getPermissions();
         setContentView(R.layout.activity_maps);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
@@ -50,23 +49,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        getPermissions();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        //stopSensors();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        //startSensors();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        stopSensors();
         this.stopService(new Intent(this, FileService.class));
     }
 
@@ -84,11 +83,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void startSensors() {
-        if (mAcc == null) {
-            mAcc = new Accelerometer(MapsActivity.this);
-        }
         if (mGps == null) {
             mGps = new GpsSensor(MapsActivity.this);
+        }
+
+        if (mAcc == null) {
+            mAcc = new Accelerometer(MapsActivity.this);
         }
         mAcc.startSensor();
         mGps.startGps();
@@ -96,8 +96,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void stopSensors() {
-        if(mAcc != null) mAcc.stopSensor();
-        if (mGps != null) mGps.stopGps();
+        if(mAcc != null) {
+            mAcc.stopSensor();
+            mAcc = null;
+        }
+        if (mGps != null) {
+            mGps.stopGps();
+            mGps = null;
+        }
     }
 
     public GoogleMap getMap() { return mMap; }

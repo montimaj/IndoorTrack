@@ -29,7 +29,7 @@ public class SensorDataWriter {
             formatx.format("%.10f", x);
             formaty.format("%.10f", y);
             formatz.format("%.10f", z);
-            String data = formatx + "," + formaty + "," + formatz + "\n";
+            String data = System.currentTimeMillis() + "," + formatx + "," + formaty + "," + formatz + "\n";
             mOut.write(data.getBytes());
         } catch (IOException e) { e.printStackTrace(); }
     }
