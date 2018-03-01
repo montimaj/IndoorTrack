@@ -14,8 +14,6 @@ import com.google.android.gms.maps.model.LatLng;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 
-import java.util.Vector;
-
 import app.imu.indoortrack.MapsActivity;
 import app.imu.indoortrack.io.SensorDataWriter;
 
@@ -34,36 +32,26 @@ public class Accelerometer implements SensorEventListener {
     private Sensor mAcc;
     private SensorDataWriter mWriter1;
     private SensorDataWriter mWriter2;
+    private SensorDataWriter mWriter3;
     private RealVector mCorrectedVectorX;
     private RealVector mCorrectedVectorY;
     private RealVector mCorrectedVectorZ;
-    private Vector<Double> mAccVecX;
-    private Vector<Double> mAccVecY;
-    private Vector<Double> mAccVecZ;
 
-    static double sAccXBias = 10d;
-    static double sAccYBias = 10d;
-    static double sAccZBias = 10d;
-
-    private static final String[] FILE_NAMES = new String[] { "AccData.csv", "Corrected.csv" };
+    private static final String[] FILE_NAMES = new String[] { "AccData.csv", "Corrected.csv", "Dist.csv" };
     private static final int UPDATE_INTERVAL_IN_MICROSECONDS = (int) 1E+6;
-    private static final int ACC_CALIBRATION_ROUNDS = 200;
-
-    private boolean mCalibrate;
-    private int mNumReadings;
 
     public Accelerometer(MapsActivity activity) {
-        mCalibrate = true;
         mActivity = activity;
         mSensorManager = (SensorManager) activity.getSystemService(Context.SENSOR_SERVICE);
         assert mSensorManager != null;
         mAcc = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        mAccVecX = new Vector<>();
-        mAccVecY = new Vector<>();
-        mAccVecZ = new Vector<>();
-        mNumReadings = 0;
         mWriter1 = new SensorDataWriter(FILE_NAMES[0], activity);
         mWriter2 = new SensorDataWriter(FILE_NAMES[1], activity);
+        mWriter3 = new SensorDataWriter(FILE_NAMES[2], activity);
+    }
+
+    private double getEuclideanDistance(double[] point1, double[] point2) {
+        return Math.sqrt(Math.pow(point1[0]-point2[0], 2) + Math.pow(point1[1] - point2[1], 2));
     }
 
     @Override
@@ -71,29 +59,16 @@ public class Accelerometer implements SensorEventListener {
         double accX = sensorEvent.values[0];
         double accY = sensorEvent.values[1];
         double accZ = sensorEvent.values[2];
-        if (!mCalibrate && sFilterInitialized) {
+        if (sFilterInitialized) {
             performCorrections(accX, accY, accZ);
             mWriter1.writeData(accX, accY, accZ);
             accX = mCorrectedVectorX.getEntry(0);
             accY = mCorrectedVectorY.getEntry(0);
             accZ = mCorrectedVectorZ.getEntry(0);
+            mWriter3.writeData(getEuclideanDistance(new double[] {accX, accY}, new double[] {sGpsX, sGpsY}));
             double[] geodetic = Projection.cartesianToGeodetic(accX, accY, accZ);
             mWriter2.writeData(geodetic[0], geodetic[1], geodetic[2]);
             updateMap(geodetic[0], geodetic[1]);
-        } else if (mCalibrate) {
-            if (mNumReadings <= ACC_CALIBRATION_ROUNDS) {
-                mAccVecX.add(accX);
-                mAccVecY.add(accY);
-                mAccVecZ.add(accZ);
-                ++mNumReadings;
-                System.out.println(mNumReadings + "," + accX + "," + accY + "," + accZ);
-            } else {
-                SensorBias sensorBias = new SensorBias(mAccVecX, mAccVecY, mAccVecZ);
-                sAccXBias = sensorBias.getBiasX();
-                sAccYBias = sensorBias.getBiasY();
-                sAccZBias = sensorBias.getBiasZ();
-                mCalibrate = false;
-            }
         }
     }
 
@@ -139,17 +114,22 @@ public class Accelerometer implements SensorEventListener {
         } catch (InterruptedException e) { e.printStackTrace(); }
     }
 
-    private void updateMap(double lat, double lon) {
-        GoogleMap map = mActivity.getMap();
-        LatLng latLng = new LatLng(lat, lon);
-        if (map != null) {
-            try {
-                map.setMyLocationEnabled(true);
-            } catch (SecurityException e) { e.printStackTrace(); }
-            map.addCircle(new CircleOptions().center(latLng));
-            map.moveCamera(CameraUpdateFactory.newLatLng(latLng));
-            map.animateCamera(CameraUpdateFactory.zoomTo(20));
-        }
+    private void updateMap(final double lat, final double lon) {
+        mActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                GoogleMap map = mActivity.getMap();
+                LatLng latLng = new LatLng(lat, lon);
+                if (map != null) {
+                    try {
+                        map.setMyLocationEnabled(true);
+                    } catch (SecurityException e) { e.printStackTrace(); }
+                    map.addCircle(new CircleOptions().center(latLng));
+                    map.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+                    map.animateCamera(CameraUpdateFactory.zoomTo(20));
+                }
+            }
+        });
     }
 
     public void startSensor() {

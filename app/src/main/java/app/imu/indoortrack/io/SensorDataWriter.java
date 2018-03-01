@@ -34,6 +34,15 @@ public class SensorDataWriter {
         } catch (IOException e) { e.printStackTrace(); }
     }
 
+    public void writeData(double val) {
+        try {
+            Formatter formatVal = new Formatter();
+            formatVal.format("%.10f", val);
+            String data = System.currentTimeMillis() + "," + formatVal + "\n";
+            mOut.write(data.getBytes());
+        } catch (IOException e) { e.printStackTrace(); }
+    }
+
     static void closeAllFiles() {
         try {
             for (FileOutputStream fos: sOpenFiles) {

@@ -21,8 +21,6 @@ import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
-import java.util.Vector;
-
 import app.imu.indoortrack.MapsActivity;
 import app.imu.indoortrack.io.SensorDataWriter;
 
@@ -35,9 +33,6 @@ public class GpsSensor {
     private SettingsClient mSettingsClient;
     private LocationSettingsRequest mLocationSettingsRequest;
     private SensorDataWriter mWriter;
-    private Vector<Double> mGpsVecX;
-    private Vector<Double> mGpsVecY;
-    private Vector<Double> mGpsVecZ;
 
     static SensorDataFilter sSensorDataFilterX;
     static SensorDataFilter sSensorDataFilterY;
@@ -48,34 +43,20 @@ public class GpsSensor {
     static double sGpsY;
     static double sGpsZ;
 
-    private static double sXBias = 0.2d;
-    private static double sYBias = 0.2d;
-    private static double sZBias = 0.2d;
-
     private static final String TAG = "GpsSensor";
     private static final String FILE_NAME = "GpsData.csv";
     private static final int REQUEST_CHECK_SETTINGS = 0x1;
     private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 1000;
     private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS = 500;
-    private static final int GPS_CALIBRATION_ROUNDS = 100;
-
-    private int mNumReadings;
-    private boolean mCalibrate;
 
     public GpsSensor(MapsActivity activity) {
         mActivity = activity;
-        mCalibrate = true;
         mFusedLocationClient = new FusedLocationProviderClient(mActivity);
         mSettingsClient = LocationServices.getSettingsClient(mActivity);
         mWriter = new SensorDataWriter(FILE_NAME, activity);
         createLocationCallback();
         createLocationRequest();
         buildLocationSettingsRequest();
-        mGpsVecX = new Vector<>();
-        mGpsVecY = new Vector<>();
-        mGpsVecZ = new Vector<>();
-        mNumReadings = 0;
-
     }
 
     private void createLocationRequest() {
@@ -142,9 +123,7 @@ public class GpsSensor {
                     double lat = location.getLatitude();
                     double lon = location.getLongitude();
                     double alt = location.getAltitude();
-                    if (!mCalibrate) {
-                        updateData(lat, lon, alt);
-                    } else calibrateData(lat, lon, alt);
+                    updateData(lat, lon, alt);
                 }
             }
         };
@@ -157,30 +136,10 @@ public class GpsSensor {
         sGpsY = cartesian[1];
         sGpsZ = cartesian[2];
         if (!sFilterInitialized) {
-            sSensorDataFilterX = new SensorDataFilter(sGpsX, sXBias, Accelerometer.sAccXBias);
-            sSensorDataFilterY = new SensorDataFilter(sGpsY, sYBias, Accelerometer.sAccYBias);
-            sSensorDataFilterZ = new SensorDataFilter(sGpsZ, sZBias, Accelerometer.sAccZBias);
+            sSensorDataFilterX = new SensorDataFilter(sGpsX);
+            sSensorDataFilterY = new SensorDataFilter(sGpsY);
+            sSensorDataFilterZ = new SensorDataFilter(sGpsZ);
             sFilterInitialized = true;
-        }
-    }
-
-    private void calibrateData(double lat, double lon, double alt) {
-        double[] cartesian = Projection.geodeticToCartesian(lat, lon, alt);
-        double x = cartesian[0];
-        double y = cartesian[1];
-        double z = cartesian[2];
-        if (mNumReadings <= GPS_CALIBRATION_ROUNDS) {
-            mGpsVecX.add(x);
-            mGpsVecY.add(y);
-            mGpsVecZ.add(z);
-            ++mNumReadings;
-            System.out.println(mNumReadings + "," + x + "," + y + "," + z);
-        } else {
-            SensorBias sensorBias = new SensorBias(mGpsVecX, mGpsVecY, mGpsVecZ);
-            sXBias = sensorBias.getBiasX();
-            sYBias = sensorBias.getBiasY();
-            sZBias = sensorBias.getBiasZ();
-            mCalibrate = false;
         }
     }
 

@@ -83,15 +83,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void startSensors() {
-        if (mGps == null) {
-            mGps = new GpsSensor(MapsActivity.this);
-        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (mGps == null) {
+                    mGps = new GpsSensor(MapsActivity.this);
+                }
 
-        if (mAcc == null) {
-            mAcc = new Accelerometer(MapsActivity.this);
-        }
-        mAcc.startSensor();
-        mGps.startGps();
+                if (mAcc == null) {
+                    mAcc = new Accelerometer(MapsActivity.this);
+                }
+                mAcc.startSensor();
+                mGps.startGps();
+            }
+        }).start();
         this.startService(new Intent(this, FileService.class));
     }
 
