@@ -18,10 +18,9 @@ public class SensorDataFilter {
     private KalmanFilter mKFilter;
 
     private static final double DT = 1d;
-    private static final double GPS_NOISE = 0.04d;
-    private static final double ACC_NOISE = 0.03d;
 
-    public SensorDataFilter(double gpsValue) {
+    public SensorDataFilter(double gpsValue, double gpsNoise, double accNoise) {
+        System.out.println(gpsNoise);
         mX = new ArrayRealVector(new double[] { gpsValue, 0 });
         mA = new Array2DRowRealMatrix(new double[][] { { 1, DT }, { 0, 1 } });
         mB = new Array2DRowRealMatrix(new double[][] { { Math.pow(DT, 2d) / 2d }, { DT } });
@@ -29,9 +28,9 @@ public class SensorDataFilter {
         RealMatrix q = new Array2DRowRealMatrix(new double[][]{
                 {Math.pow(DT, 4d) / 4d, Math.pow(DT, 3d) / 2d},
                 {Math.pow(DT, 3d) / 2d, Math.pow(DT, 2d)}});
-        RealMatrix q1 = q.scalarMultiply(Math.pow(ACC_NOISE, 2));
+        RealMatrix q1 = q.scalarMultiply(Math.pow(accNoise, 2));
         RealMatrix p0 = new Array2DRowRealMatrix(new double[][]{{1, 1}, {1, 1}});
-        RealMatrix r = new Array2DRowRealMatrix(new double[]{Math.pow(GPS_NOISE, 2)});
+        RealMatrix r = new Array2DRowRealMatrix(new double[]{Math.pow(gpsNoise, 2)});
         ProcessModel pm = new DefaultProcessModel(mA, mB, q1, mX, p0);
         MeasurementModel mm = new DefaultMeasurementModel(h, r);
         mKFilter = new KalmanFilter(pm, mm);

@@ -3,7 +3,6 @@ package app.imu.indoortrack.sensor;
 import android.content.IntentSender;
 import android.location.Location;
 import android.os.Looper;
-import android.support.annotation.NonNull;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -15,11 +14,8 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
-import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.LocationSettingsStatusCodes;
 import com.google.android.gms.location.SettingsClient;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 
 import app.imu.indoortrack.MapsActivity;
 import app.imu.indoortrack.io.SensorDataWriter;
@@ -33,6 +29,8 @@ public class GpsSensor {
     private SettingsClient mSettingsClient;
     private LocationSettingsRequest mLocationSettingsRequest;
     private SensorDataWriter mWriter;
+    private Location mCurrLocation;
+    private InertialSensor mInertialSensor;
 
     static SensorDataFilter sSensorDataFilterX;
     static SensorDataFilter sSensorDataFilterY;
@@ -46,14 +44,15 @@ public class GpsSensor {
     private static final String TAG = "GpsSensor";
     private static final String FILE_NAME = "GpsData.csv";
     private static final int REQUEST_CHECK_SETTINGS = 0x1;
-    private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 1000;
-    private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS = 500;
+    private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 1;
+    private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS = 1;
 
-    public GpsSensor(MapsActivity activity) {
+    public GpsSensor(MapsActivity activity, InertialSensor acc) {
         mActivity = activity;
         mFusedLocationClient = new FusedLocationProviderClient(mActivity);
         mSettingsClient = LocationServices.getSettingsClient(mActivity);
         mWriter = new SensorDataWriter(FILE_NAME, activity);
+        mInertialSensor = acc;
         createLocationCallback();
         createLocationRequest();
         buildLocationSettingsRequest();
@@ -75,42 +74,36 @@ public class GpsSensor {
     public void startGps() {
         // Begin by checking if the device has the necessary location settings.
         mSettingsClient.checkLocationSettings(mLocationSettingsRequest)
-                .addOnSuccessListener(mActivity, new OnSuccessListener<LocationSettingsResponse>() {
-                    @Override
-                    public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
-                        Log.i(TAG, "All location settings are satisfied.");
+                .addOnSuccessListener(mActivity, locationSettingsResponse -> {
+                    Log.i(TAG, "All location settings are satisfied.");
 
-                        //noinspection MissingPermission
-                        try {
-                            mFusedLocationClient.requestLocationUpdates(mLocationRequest,
-                                    mLocationCallback, Looper.myLooper());
-                        } catch (SecurityException e) { e.printStackTrace(); }
+                    //noinspection MissingPermission
+                    try {
+                        mFusedLocationClient.requestLocationUpdates(mLocationRequest,
+                                mLocationCallback, Looper.myLooper());
+                    } catch (SecurityException e) { e.printStackTrace(); }
 
-                    }
                 })
-                .addOnFailureListener(mActivity, new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        int statusCode = ((ApiException) e).getStatusCode();
-                        switch (statusCode) {
-                            case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
-                                Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
-                                        "location settings ");
-                                try {
-                                    // Show the dialog by calling startResolutionForResult(), and check the
-                                    // result in onActivityResult().
-                                    ResolvableApiException rae = (ResolvableApiException) e;
-                                    rae.startResolutionForResult(mActivity, REQUEST_CHECK_SETTINGS);
-                                } catch (IntentSender.SendIntentException sie) {
-                                    Log.i(TAG, "PendingIntent unable to execute request.");
-                                }
-                                break;
-                            case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-                                String errorMessage = "Location settings are inadequate, and cannot be " +
-                                        "fixed here. Fix in Settings.";
-                                Log.e(TAG, errorMessage);
-                                Toast.makeText(mActivity, errorMessage, Toast.LENGTH_LONG).show();
-                        }
+                .addOnFailureListener(mActivity, e -> {
+                    int statusCode = ((ApiException) e).getStatusCode();
+                    switch (statusCode) {
+                        case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
+                            Log.i(TAG, "Location settings are not satisfied. Attempting to upgrade " +
+                                    "location settings ");
+                            try {
+                                // Show the dialog by calling startResolutionForResult(), and check the
+                                // result in onActivityResult().
+                                ResolvableApiException rae = (ResolvableApiException) e;
+                                rae.startResolutionForResult(mActivity, REQUEST_CHECK_SETTINGS);
+                            } catch (IntentSender.SendIntentException sie) {
+                                Log.i(TAG, "PendingIntent unable to execute request.");
+                            }
+                            break;
+                        case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
+                            String errorMessage = "Location settings are inadequate, and cannot be " +
+                                    "fixed here. Fix in Settings.";
+                            Log.e(TAG, errorMessage);
+                            Toast.makeText(mActivity, errorMessage, Toast.LENGTH_LONG).show();
                     }
                 });
     }
@@ -119,26 +112,44 @@ public class GpsSensor {
         mLocationCallback = new LocationCallback() {
             @Override
             public void onLocationResult(LocationResult locationResult) {
-                for (Location location: locationResult.getLocations()) {
-                    double lat = location.getLatitude();
-                    double lon = location.getLongitude();
-                    double alt = location.getAltitude();
-                    updateData(lat, lon, alt);
+                if (mInertialSensor.isAccCalibrationDone()) {
+                    Location location = locationResult.getLastLocation();
+                    boolean hasChange = false;
+                    if (!sFilterInitialized || (hasChange = acceptableChange(mCurrLocation, location))) {
+                        mCurrLocation = location;
+                        if (hasChange)  sFilterInitialized = false;
+                        updateData(mCurrLocation);
+                    }
                 }
             }
         };
     }
 
-    private void updateData(double lat, double lon, double alt) {
+    private boolean acceptableChange(Location location1, Location location2) {
+        return location1.getLatitude() !=  location2.getLatitude() ||
+                location1.getLongitude() != location2.getLongitude() ||
+                location1.getAltitude() != location2.getAltitude();
+    }
+
+    private void updateData(Location location) {
+        double lat = location.getLatitude();
+        double lon = location.getLongitude();
+        double alt = location.getAltitude();
         mWriter.writeData(lat, lon, alt);
         double[] cartesian = Projection.geodeticToCartesian(lat, lon, alt);
         sGpsX = cartesian[0];
         sGpsY = cartesian[1];
         sGpsZ = cartesian[2];
         if (!sFilterInitialized) {
-            sSensorDataFilterX = new SensorDataFilter(sGpsX);
-            sSensorDataFilterY = new SensorDataFilter(sGpsY);
-            sSensorDataFilterZ = new SensorDataFilter(sGpsZ);
+            double horizontalAccuracy = location.getAccuracy()/100d;
+            SensorBias sensorBias = mInertialSensor.getAccSensorBias();
+            double accXBias  = sensorBias.getBiasX();
+            double accYBias = sensorBias.getBiasY();
+            double accZBias = sensorBias.getBiasZ();
+            System.out.println("Bias = " + accXBias + "," + accYBias + "," + accZBias);
+            sSensorDataFilterX = new SensorDataFilter(sGpsX, horizontalAccuracy, accXBias);
+            sSensorDataFilterY = new SensorDataFilter(sGpsY, horizontalAccuracy, accYBias);
+            sSensorDataFilterZ = new SensorDataFilter(sGpsZ, 0, accZBias);
             sFilterInitialized = true;
         }
     }

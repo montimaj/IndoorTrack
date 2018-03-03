@@ -8,6 +8,8 @@ public class SensorBias {
     private Vector<Double> mVecY;
     private Vector<Double> mVecZ;
 
+    public SensorBias() {}
+
     public SensorBias(Vector<Double> vecx, Vector<Double> vecy, Vector<Double> vecz) {
         mVecX = vecx;
         mVecY = vecy;
@@ -28,15 +30,13 @@ public class SensorBias {
         return Math.sqrt(sum/(n-1));
     }
 
-    public double getBiasX() {
-        return getStandardDeviation(mVecX);
-    }
+    public void setBiasX(Vector<Double> vecx) { mVecX = vecx; }
+    public void setBiasY(Vector<Double> vecy) { mVecY = vecy; }
+    public void setBiasZ(Vector<Double> vecz) { mVecZ = vecz; }
 
-    public double getBiasY() {
-        return getStandardDeviation(mVecY);
-    }
+    public double getBiasX() { return getStandardDeviation(mVecX); }
 
-    public double getBiasZ() {
-        return getStandardDeviation(mVecZ);
-    }
+    public double getBiasY() { return getStandardDeviation(mVecY); }
+
+    public double getBiasZ() { return getStandardDeviation(mVecZ); }
 }
