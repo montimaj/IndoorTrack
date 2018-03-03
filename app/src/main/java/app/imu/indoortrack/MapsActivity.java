@@ -11,6 +11,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
+import android.widget.Button;
 import android.widget.Toast;
 
 import com.google.android.gms.maps.GoogleMap;
@@ -28,6 +29,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private GpsSensor mGps;
     private SharedPreferences mSharedPrefs;
 
+    private boolean mSensorsStarted;
+
     public ProgressDialog mProgressDialog;
 
     private static final int REQUEST_ACCESS_CODE = 1001;
@@ -43,6 +46,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
         mSharedPrefs = getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE);
+        Button startButton = findViewById(R.id.start);
+        Button stopButton = findViewById(R.id.stop);
+        startButton.setOnClickListener(view -> {
+            if (!mSensorsStarted) {
+                Toast.makeText(this, "Started Indoor Tracking", Toast.LENGTH_LONG).show();
+                startService(new Intent(this, FileService.class));
+                getPermissions();
+                mSensorsStarted = true;
+            }
+        });
+        stopButton.setOnClickListener(view -> {
+            if (mInertialSensor != null) {
+                Toast.makeText(this, "Total Distance = " +
+                        mInertialSensor.getTotalDistance() + "m", Toast.LENGTH_LONG).show();
+                stopSensors();
+            }
+        });
     }
 
 
@@ -56,26 +76,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      * installed Google Play services and returned to the app.
      */
     @Override
-    public void onMapReady(GoogleMap googleMap) {
-        mMap = googleMap;
-        getPermissions();
-    }
+    public void onMapReady(GoogleMap googleMap) { mMap = googleMap; }
 
     @Override
-    public void onPause() {
-        super.onPause();
-    }
+    public void onPause() { super.onPause(); }
 
     @Override
-    public void onResume() {
-        super.onResume();
-    }
+    public void onResume() { super.onResume(); }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         stopSensors();
-        this.stopService(new Intent(this, FileService.class));
     }
 
     @Override
@@ -94,7 +106,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void startSensors() {
-        this.startService(new Intent(this, FileService.class));
         new Thread(() -> {
             if (mInertialSensor == null) {
                 mInertialSensor = new InertialSensor(MapsActivity.this);
@@ -108,6 +119,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void stopSensors() {
+        stopService(new Intent(this, FileService.class));
+        mSensorsStarted = false;
         if(mInertialSensor != null) {
             mInertialSensor.stopSensors();
             mInertialSensor = null;

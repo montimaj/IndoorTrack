@@ -44,8 +44,9 @@ public class GpsSensor {
     private static final String TAG = "GpsSensor";
     private static final String FILE_NAME = "GpsData.csv";
     private static final int REQUEST_CHECK_SETTINGS = 0x1;
-    private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 1;
-    private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS = 1;
+    private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 1000;
+    private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS = 500;
+    private static final double GPS_CHANGE_THRESHOLD = 0.01d;
 
     public GpsSensor(MapsActivity activity, InertialSensor acc) {
         mActivity = activity;
@@ -114,10 +115,10 @@ public class GpsSensor {
             public void onLocationResult(LocationResult locationResult) {
                 if (mInertialSensor.isAccCalibrationDone()) {
                     Location location = locationResult.getLastLocation();
-                    boolean hasChange = false;
-                    if (!sFilterInitialized || (hasChange = acceptableChange(mCurrLocation, location))) {
+                    boolean hasAcceptableChange = false;
+                    if (!sFilterInitialized || (hasAcceptableChange = acceptableChange(mCurrLocation, location))) {
                         mCurrLocation = location;
-                        if (hasChange)  sFilterInitialized = false;
+                        if (hasAcceptableChange)    mInertialSensor.clearInitAcc();
                         updateData(mCurrLocation);
                     }
                 }
@@ -126,9 +127,9 @@ public class GpsSensor {
     }
 
     private boolean acceptableChange(Location location1, Location location2) {
-        return location1.getLatitude() !=  location2.getLatitude() ||
-                location1.getLongitude() != location2.getLongitude() ||
-                location1.getAltitude() != location2.getAltitude();
+        return Math.abs(location1.getLatitude() - location2.getLatitude()) > GPS_CHANGE_THRESHOLD ||
+                Math.abs(location1.getLongitude() - location2.getLongitude()) > GPS_CHANGE_THRESHOLD ||
+                Math.abs(location1.getAltitude() - location2.getAltitude()) > GPS_CHANGE_THRESHOLD;
     }
 
     private void updateData(Location location) {
@@ -141,6 +142,7 @@ public class GpsSensor {
         sGpsY = cartesian[1];
         sGpsZ = cartesian[2];
         if (!sFilterInitialized) {
+            mInertialSensor.updateMap(lat, lon);
             double horizontalAccuracy = location.getAccuracy()/100d;
             SensorBias sensorBias = mInertialSensor.getAccSensorBias();
             double accXBias  = sensorBias.getBiasX();
@@ -155,6 +157,7 @@ public class GpsSensor {
     }
 
     public void stopGps() {
+        sFilterInitialized = false;
         if(mFusedLocationClient != null)
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
     }

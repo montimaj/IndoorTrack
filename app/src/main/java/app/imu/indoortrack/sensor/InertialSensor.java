@@ -45,13 +45,16 @@ public class InertialSensor implements SensorEventListener {
     private Vector<Double> mAccVecX;
     private Vector<Double> mAccVecY;
     private Vector<Double> mAccVecZ;
+    private Vector<Double> mDistance = new Vector<>();
 
     private long mSensorTimeStamp;
     private double mAccX;
     private double mAccY;
     private double mAccZ;
-    private float[] mAccVal = new float[3];
-    private float[] mMagnetVal = new float[3];
+    private int mNumAccVals;
+    private int mNumMagnetoVals;
+    private float[] mAvgAccVal;
+    private float[] mAvgMagnetoVal;
     private float[] mRotationMatrix = new float[9];
     private float[] mOrientationMatrix = new float[3];
     private boolean mAccInitialized;
@@ -59,8 +62,9 @@ public class InertialSensor implements SensorEventListener {
     private int mNumReadings;
 
     private static final String[] FILE_NAMES = new String[] { "AccData.csv", "Corrected.csv", "Dist.csv" };
-    private static final int UPDATE_INTERVAL_IN_MICROSECONDS = (int) 1E+6;
+    private static final long UPDATE_INTERVAL_IN_NANOSECONDS = (long) 1E+9;
     private static final int CALIBRATION_ROUNDS = 60;
+    private static final double MIN_DISTANCE_INTERVAL = 0.1d;
 
     public InertialSensor(MapsActivity activity) {
         mActivity = activity;
@@ -68,6 +72,7 @@ public class InertialSensor implements SensorEventListener {
         mWriter1 = new SensorDataWriter(FILE_NAMES[0], activity);
         mWriter2 = new SensorDataWriter(FILE_NAMES[1], activity);
         mWriter3 = new SensorDataWriter(FILE_NAMES[2], activity);
+        initAvgFilter();
         SharedPreferences prefs = activity.getSharedPrefs();
         String gsonStr = prefs.getString(SHARED_PREFS_NAME, null);
         if(gsonStr == null) {
@@ -85,28 +90,50 @@ public class InertialSensor implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
+        boolean sensor1 = sensorEvent.sensor.getType() == Sensor.TYPE_LINEAR_ACCELERATION;
+        boolean sensor2 = sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD;
         if(correctInterval(sensorEvent.timestamp)) {
             mSensorTimeStamp = sensorEvent.timestamp;
-            if (sensorEvent.sensor.getType() == Sensor.TYPE_LINEAR_ACCELERATION) {
-                mAccVal = sensorEvent.values;
-            }
-            if (sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-                mMagnetVal = sensorEvent.values;
-            }
+            mAvgAccVal[0] /= mNumAccVals;
+            mAvgAccVal[1] /= mNumAccVals;
+            mAvgAccVal[2] /= mNumAccVals;
+            mAvgMagnetoVal[0] /= mNumMagnetoVals;
+            mAvgMagnetoVal[1] /= mNumMagnetoVals;
+            mAvgMagnetoVal[2] /= mNumMagnetoVals;
             if (!mAccCalibrationDone) {
                 calibrate();
-            } else if (sFilterInitialized) performPostCalibrationTasks();
+            } else if (sFilterInitialized) {
+                performPostCalibrationTasks();
+            }
+            initAvgFilter();
+        } else if (sensor1) {
+            mNumAccVals++;
+            mAvgAccVal[0] += sensorEvent.values[0];
+            mAvgAccVal[1] += sensorEvent.values[1];
+            mAvgAccVal[2] += sensorEvent.values[2];
+        } else if (sensor2) {
+            mNumMagnetoVals++;
+            mAvgMagnetoVal[0] += sensorEvent.values[0];
+            mAvgMagnetoVal[1] += sensorEvent.values[1];
+            mAvgMagnetoVal[2] += sensorEvent.values[2];
         }
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int i) {}
 
+    private void initAvgFilter() {
+        mNumAccVals = 1;
+        mNumMagnetoVals = 1;
+        mAvgAccVal = new float[3];
+        mAvgMagnetoVal = new float[3];
+    }
+
     private void calibrate() {
         double[] rotationAngles = getRotationAngles();
-        double accX = mAccVal[0] * Math.cos(rotationAngles[0]);
-        double accY = mAccVal[1] * Math.cos(rotationAngles[1]);
-        double accZ = mAccVal[2] * Math.cos(rotationAngles[2]);
+        double accX = mAvgAccVal[0] * Math.cos(rotationAngles[0]);
+        double accY = mAvgAccVal[1] * Math.cos(rotationAngles[1]);
+        double accZ = mAvgAccVal[2] * Math.cos(rotationAngles[2]);
         System.out.println(mNumReadings + ": " + accX + "," + accY + "," + accZ);
         mAccVecX.add(accX);
         mAccVecY.add(accY);
@@ -121,7 +148,7 @@ public class InertialSensor implements SensorEventListener {
     }
 
     private boolean correctInterval(long timestamp) {
-        return (timestamp - mSensorTimeStamp) >= (long) 1E+9;
+        return (timestamp - mSensorTimeStamp) >= UPDATE_INTERVAL_IN_NANOSECONDS;
     }
 
     private double getEuclideanDistance(double[] point1, double[] point2) {
@@ -130,7 +157,7 @@ public class InertialSensor implements SensorEventListener {
     }
 
     private double[] getRotationAngles() {
-        SensorManager.getRotationMatrix(mRotationMatrix, null, mAccVal, mMagnetVal);
+        SensorManager.getRotationMatrix(mRotationMatrix, null, mAvgAccVal, mAvgMagnetoVal);
         SensorManager.getOrientation(mRotationMatrix, mOrientationMatrix);
         double azimuth = Math.toDegrees(mOrientationMatrix[0]);
         double pitch = Math.toDegrees(mOrientationMatrix[1]);
@@ -140,9 +167,9 @@ public class InertialSensor implements SensorEventListener {
 
     private void performPostCalibrationTasks() {
         double[] rotationAngles = getRotationAngles();
-        double accX = mAccVal[0] * Math.cos(rotationAngles[0]);
-        double accY = mAccVal[1] * Math.cos(rotationAngles[1]);
-        double accZ = mAccVal[2] * Math.cos(rotationAngles[2]);
+        double accX = mAvgAccVal[0] * Math.cos(rotationAngles[0]);
+        double accY = mAvgAccVal[1] * Math.cos(rotationAngles[1]);
+        double accZ = mAvgAccVal[2] * Math.cos(rotationAngles[2]);
         performCorrections(accX, accY, accZ);
         mWriter1.writeData(accX, accY, accZ);
         accX = mCorrectedVectorX.getEntry(0);
@@ -155,10 +182,13 @@ public class InertialSensor implements SensorEventListener {
             mAccInitialized = true;
         }
         double dist = getEuclideanDistance(new double[]{accX, accY, accZ}, new double[]{mAccX, mAccY, mAccZ});
-        mWriter3.writeData(dist);
-        double[] geodetic = Projection.cartesianToGeodetic(accX, accY, accZ);
-        mWriter2.writeData(geodetic[0], geodetic[1], geodetic[2]);
-        updateMap(geodetic[0], geodetic[1]);
+        if (dist >= MIN_DISTANCE_INTERVAL) {
+            mDistance.add(dist);
+            mWriter3.writeData(dist);
+            double[] geodetic = Projection.cartesianToGeodetic(accX, accY, accZ);
+            mWriter2.writeData(geodetic[0], geodetic[1], geodetic[2]);
+            updateMap(geodetic[0], geodetic[1]);
+        }
         mAccX = accX;
         mAccY = accY;
         mAccZ = accZ;
@@ -194,7 +224,7 @@ public class InertialSensor implements SensorEventListener {
         } catch (InterruptedException e) { e.printStackTrace(); }
     }
 
-    private void updateMap(final double lat, final double lon) {
+    void updateMap(final double lat, final double lon) {
         mActivity.runOnUiThread(() -> {
             GoogleMap map = mActivity.getMap();
             LatLng latLng = new LatLng(lat, lon);
@@ -215,9 +245,22 @@ public class InertialSensor implements SensorEventListener {
         mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_FASTEST);
     }
 
-    public void stopSensors() { mSensorManager.unregisterListener(this); }
+    public void stopSensors() {
+        clearInitAcc();
+        mSensorManager.unregisterListener(this);
+    }
 
     public SensorBias getAccSensorBias() { return mSensorBias; }
 
     public boolean isAccCalibrationDone() { return mAccCalibrationDone; }
+
+    public void clearInitAcc() { mAccInitialized = false; }
+
+    public double getTotalDistance() {
+        double dist = 0.;
+        for(double distance: mDistance) {
+            dist += distance;
+        }
+        return dist;
+    }
 }
