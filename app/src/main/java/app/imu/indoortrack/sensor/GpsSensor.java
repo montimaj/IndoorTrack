@@ -46,7 +46,7 @@ public class GpsSensor {
     private static final int REQUEST_CHECK_SETTINGS = 0x1;
     private static final long UPDATE_INTERVAL_IN_MILLISECONDS = 1000;
     private static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS = 500;
-    private static final double GPS_CHANGE_THRESHOLD = 0.01d;
+    private static final double GPS_CHANGE_THRESHOLD = 0.001d;
 
     public GpsSensor(MapsActivity activity, InertialSensor acc) {
         mActivity = activity;
@@ -115,10 +115,9 @@ public class GpsSensor {
             public void onLocationResult(LocationResult locationResult) {
                 if (mInertialSensor.isAccCalibrationDone()) {
                     Location location = locationResult.getLastLocation();
-                    boolean hasAcceptableChange = false;
-                    if (!sFilterInitialized || (hasAcceptableChange = acceptableChange(mCurrLocation, location))) {
+                    //boolean hasAcceptableChange = false;
+                    if (!sFilterInitialized /*|| acceptableChange(mCurrLocation, location)*/) {
                         mCurrLocation = location;
-                        if (hasAcceptableChange)    mInertialSensor.clearInitAcc();
                         updateData(mCurrLocation);
                     }
                 }

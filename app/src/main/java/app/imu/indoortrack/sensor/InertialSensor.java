@@ -52,11 +52,9 @@ public class InertialSensor implements SensorEventListener {
     private double mAccY;
     private double mAccZ;
     private int mNumAccVals;
-    private int mNumMagnetoVals;
+    private int mNumGyroVals;
     private float[] mAvgAccVal;
-    private float[] mAvgMagnetoVal;
-    private float[] mRotationMatrix = new float[9];
-    private float[] mOrientationMatrix = new float[3];
+    private float[] mAvgGyroVal;
     private boolean mAccInitialized;
     private boolean mAccCalibrationDone;
     private int mNumReadings;
@@ -64,7 +62,7 @@ public class InertialSensor implements SensorEventListener {
     private static final String[] FILE_NAMES = new String[] { "AccData.csv", "Corrected.csv", "Dist.csv" };
     private static final long UPDATE_INTERVAL_IN_NANOSECONDS = (long) 1E+9;
     private static final int CALIBRATION_ROUNDS = 60;
-    private static final double MIN_DISTANCE_INTERVAL = 0.1d;
+    private static final double MIN_DISTANCE_INTERVAL = 0.0d;
 
     public InertialSensor(MapsActivity activity) {
         mActivity = activity;
@@ -81,7 +79,6 @@ public class InertialSensor implements SensorEventListener {
             mAccVecX = new Vector<>();
             mAccVecY = new Vector<>();
             mAccVecZ = new Vector<>();
-
         } else {
             mSensorBias = new Gson().fromJson(gsonStr, SensorBias.class);
             mAccCalibrationDone = true;
@@ -91,31 +88,33 @@ public class InertialSensor implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
         boolean sensor1 = sensorEvent.sensor.getType() == Sensor.TYPE_LINEAR_ACCELERATION;
-        boolean sensor2 = sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD;
+        boolean sensor2 = sensorEvent.sensor.getType() == Sensor.TYPE_GYROSCOPE_UNCALIBRATED;
         if(correctInterval(sensorEvent.timestamp)) {
             mSensorTimeStamp = sensorEvent.timestamp;
             mAvgAccVal[0] /= mNumAccVals;
             mAvgAccVal[1] /= mNumAccVals;
             mAvgAccVal[2] /= mNumAccVals;
-            mAvgMagnetoVal[0] /= mNumMagnetoVals;
-            mAvgMagnetoVal[1] /= mNumMagnetoVals;
-            mAvgMagnetoVal[2] /= mNumMagnetoVals;
+            mAvgGyroVal[0] /= mNumGyroVals;
+            mAvgGyroVal[1] /= mNumGyroVals;
+            mAvgGyroVal[2] /= mNumGyroVals;
             if (!mAccCalibrationDone) {
                 calibrate();
             } else if (sFilterInitialized) {
                 performPostCalibrationTasks();
             }
             initAvgFilter();
-        } else if (sensor1) {
+        }
+        if (sensor1) {
             mNumAccVals++;
             mAvgAccVal[0] += sensorEvent.values[0];
             mAvgAccVal[1] += sensorEvent.values[1];
             mAvgAccVal[2] += sensorEvent.values[2];
-        } else if (sensor2) {
-            mNumMagnetoVals++;
-            mAvgMagnetoVal[0] += sensorEvent.values[0];
-            mAvgMagnetoVal[1] += sensorEvent.values[1];
-            mAvgMagnetoVal[2] += sensorEvent.values[2];
+        }
+        if (sensor2) {
+            mNumGyroVals++;
+            mAvgGyroVal[0] += sensorEvent.values[0];
+            mAvgGyroVal[1] += sensorEvent.values[1];
+            mAvgGyroVal[2] += sensorEvent.values[2];
         }
     }
 
@@ -124,9 +123,9 @@ public class InertialSensor implements SensorEventListener {
 
     private void initAvgFilter() {
         mNumAccVals = 1;
-        mNumMagnetoVals = 1;
+        mNumGyroVals = 1;
         mAvgAccVal = new float[3];
-        mAvgMagnetoVal = new float[3];
+        mAvgGyroVal = new float[3];
     }
 
     private void calibrate() {
@@ -134,16 +133,18 @@ public class InertialSensor implements SensorEventListener {
         double accX = mAvgAccVal[0] * Math.cos(rotationAngles[0]);
         double accY = mAvgAccVal[1] * Math.cos(rotationAngles[1]);
         double accZ = mAvgAccVal[2] * Math.cos(rotationAngles[2]);
-        System.out.println(mNumReadings + ": " + accX + "," + accY + "," + accZ);
-        mAccVecX.add(accX);
-        mAccVecY.add(accY);
-        mAccVecZ.add(accZ);
-        if (++mNumReadings == CALIBRATION_ROUNDS) {
-            mActivity.runOnUiThread(() -> mActivity.mProgressDialog.dismiss());
-            mAccCalibrationDone = true;
-            mSensorBias = new SensorBias(mAccVecX, mAccVecY, mAccVecZ);
-            String gsonStr = new Gson().toJson(mSensorBias);
-            mActivity.getSharedPrefs().edit().putString(SHARED_PREFS_NAME, gsonStr).apply();
+        if(accX != 0. && accY != 0. && accZ != 0.) {
+            mAccVecX.add(accX);
+            mAccVecY.add(accY);
+            mAccVecZ.add(accZ);
+            System.out.println(mNumReadings + ": " + accX + "," + accY + "," + accZ);
+            if (++mNumReadings > CALIBRATION_ROUNDS) {
+                mActivity.runOnUiThread(() -> mActivity.mProgressDialog.dismiss());
+                mAccCalibrationDone = true;
+                mSensorBias = new SensorBias(mAccVecX, mAccVecY, mAccVecZ);
+                String gsonStr = new Gson().toJson(mSensorBias);
+                mActivity.getSharedPrefs().edit().putString(SHARED_PREFS_NAME, gsonStr).apply();
+            }
         }
     }
 
@@ -157,11 +158,9 @@ public class InertialSensor implements SensorEventListener {
     }
 
     private double[] getRotationAngles() {
-        SensorManager.getRotationMatrix(mRotationMatrix, null, mAvgAccVal, mAvgMagnetoVal);
-        SensorManager.getOrientation(mRotationMatrix, mOrientationMatrix);
-        double azimuth = Math.toDegrees(mOrientationMatrix[0]);
-        double pitch = Math.toDegrees(mOrientationMatrix[1]);
-        double roll = Math.toDegrees(mOrientationMatrix[2]);
+        double azimuth = Math.toDegrees(mAvgGyroVal[0]);
+        double pitch = Math.toDegrees(mAvgGyroVal[1]);
+        double roll = Math.toDegrees(mAvgGyroVal[2]);
         return new double[] {azimuth, pitch, roll};
     }
 
@@ -240,9 +239,10 @@ public class InertialSensor implements SensorEventListener {
     }
 
     public void startSensors() {
-        assert mSensorManager != null;
-        mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION), SensorManager.SENSOR_DELAY_FASTEST);
-        mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_FASTEST);
+        if (mSensorManager != null) {
+            mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION), SensorManager.SENSOR_DELAY_FASTEST);
+            mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE_UNCALIBRATED), SensorManager.SENSOR_DELAY_FASTEST);
+        } else  mActivity.runOnUiThread(() -> mActivity.mProgressDialog.dismiss());
     }
 
     public void stopSensors() {
