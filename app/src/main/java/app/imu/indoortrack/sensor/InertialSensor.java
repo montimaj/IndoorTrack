@@ -62,7 +62,8 @@ public class InertialSensor implements SensorEventListener {
     private static final String[] FILE_NAMES = new String[] { "AccData.csv", "Corrected.csv", "Dist.csv" };
     private static final long UPDATE_INTERVAL_IN_NANOSECONDS = (long) 1E+9;
     private static final int CALIBRATION_ROUNDS = 60;
-    private static final double MIN_DISTANCE_INTERVAL = 0.0d;
+    private static final double MIN_DISTANCE = 0.01;
+    private static final double MAX_DISTANCE = 1.;
 
     public InertialSensor(MapsActivity activity) {
         mActivity = activity;
@@ -88,7 +89,7 @@ public class InertialSensor implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
         boolean sensor1 = sensorEvent.sensor.getType() == Sensor.TYPE_LINEAR_ACCELERATION;
-        boolean sensor2 = sensorEvent.sensor.getType() == Sensor.TYPE_GYROSCOPE_UNCALIBRATED;
+        boolean sensor2 = sensorEvent.sensor.getType() == Sensor.TYPE_GYROSCOPE;
         if(correctInterval(sensorEvent.timestamp)) {
             mSensorTimeStamp = sensorEvent.timestamp;
             mAvgAccVal[0] /= mNumAccVals;
@@ -181,13 +182,13 @@ public class InertialSensor implements SensorEventListener {
             mAccInitialized = true;
         }
         double dist = getEuclideanDistance(new double[]{accX, accY, accZ}, new double[]{mAccX, mAccY, mAccZ});
-        if (dist >= MIN_DISTANCE_INTERVAL) {
+        //if (dist >= MIN_DISTANCE && dist <= MAX_DISTANCE) {
             mDistance.add(dist);
             mWriter3.writeData(dist);
             double[] geodetic = Projection.cartesianToGeodetic(accX, accY, accZ);
             mWriter2.writeData(geodetic[0], geodetic[1], geodetic[2]);
             updateMap(geodetic[0], geodetic[1]);
-        }
+        //}
         mAccX = accX;
         mAccY = accY;
         mAccZ = accZ;
@@ -241,7 +242,7 @@ public class InertialSensor implements SensorEventListener {
     public void startSensors() {
         if (mSensorManager != null) {
             mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION), SensorManager.SENSOR_DELAY_FASTEST);
-            mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE_UNCALIBRATED), SensorManager.SENSOR_DELAY_FASTEST);
+            mSensorManager.registerListener(this, mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_FASTEST);
         } else  mActivity.runOnUiThread(() -> mActivity.mProgressDialog.dismiss());
     }
 

@@ -16,11 +16,15 @@ public class SensorDataFilter {
     private RealMatrix mB;
     private RealVector mX;
     private KalmanFilter mKFilter;
+    private double mGpsNoise;
+    private double mAccNoise;
 
     private static final double DT = 1d;
 
     public SensorDataFilter(double gpsValue, double gpsNoise, double accNoise) {
         System.out.println(gpsNoise);
+        mGpsNoise = gpsNoise;
+        mAccNoise = accNoise;
         mX = new ArrayRealVector(new double[] { gpsValue, 0 });
         mA = new Array2DRowRealMatrix(new double[][] { { 1, DT }, { 0, 1 } });
         mB = new Array2DRowRealMatrix(new double[][] { { Math.pow(DT, 2d) / 2d }, { DT } });
@@ -43,6 +47,7 @@ public class SensorDataFilter {
      * @return Corrected vector
      */
     public RealVector estimate(RealVector u, RealVector z) {
+        if (mAccNoise == 0. && mGpsNoise == 0.) return z;
         mX = (mA.operate(mX)).add(mB.operate(u));
         mKFilter.predict(u);
         mKFilter.correct(z);

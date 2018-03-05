@@ -141,16 +141,16 @@ public class GpsSensor {
         sGpsY = cartesian[1];
         sGpsZ = cartesian[2];
         if (!sFilterInitialized) {
-            mInertialSensor.updateMap(lat, lon);
-            double horizontalAccuracy = location.getAccuracy()/100d;
+            double horizontalAccuracy = location.getAccuracy()/200.;
+            double verticalAccuracy = alt == 0 ? 0. : horizontalAccuracy + 1./20.;
             SensorBias sensorBias = mInertialSensor.getAccSensorBias();
             double accXBias  = sensorBias.getBiasX();
             double accYBias = sensorBias.getBiasY();
-            double accZBias = sensorBias.getBiasZ();
+            double accZBias = verticalAccuracy == 0. ? 0 : sensorBias.getBiasZ();
             System.out.println("Bias = " + accXBias + "," + accYBias + "," + accZBias);
             sSensorDataFilterX = new SensorDataFilter(sGpsX, horizontalAccuracy, accXBias);
             sSensorDataFilterY = new SensorDataFilter(sGpsY, horizontalAccuracy, accYBias);
-            sSensorDataFilterZ = new SensorDataFilter(sGpsZ, 0, accZBias);
+            sSensorDataFilterZ = new SensorDataFilter(sGpsZ, verticalAccuracy, accZBias);
             sFilterInitialized = true;
         }
     }
